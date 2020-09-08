@@ -24,6 +24,7 @@ type config struct {
 	Meters     []qualifiedConfig
 	Chargers   []qualifiedConfig
 	Vehicles   []qualifiedConfig
+	Abrp       AbrpConfig
 	Site       map[string]interface{}
 	LoadPoints []map[string]interface{}
 }
@@ -41,6 +42,12 @@ type typedConfig struct {
 type messagingConfig struct {
 	Events   map[string]push.EventTemplate
 	Services []typedConfig
+}
+
+// ABRP configuration
+type AbrpConfig struct {
+	Key   string
+	Token string
 }
 
 // ConfigProvider provides configuration items
