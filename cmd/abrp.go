@@ -25,8 +25,9 @@ type ABRPPostResponse struct {
 }
 
 type TlmData struct {
-	Utc string `json:"utc"`
-	Soc string `json:"soc"`
+	Utc        string `json:"utc"`
+	Soc        string `json:"soc"`
+	Ischarging bool   `json:"is_charging"`
 }
 
 // abrpCmd represents the ABRP command
@@ -61,25 +62,32 @@ func runAbrp(cmd *cobra.Command, args []string) {
 			fmt.Println(name)
 		}
 
-		if soc, err := v.ChargeState(); err != nil {
-			fmt.Printf("State: %v\n", err)
+		soc, err := v.ChargeState()
+		if err != nil {
+			fmt.Printf("ChargeState: %v\n", err)
+			return
 		} else {
 			fmt.Printf("State: %.0f%%\n", soc)
-			sendSoCState(conf, soc)
 		}
+
+		isCharging, err := v.ChargingState()
+		if err != nil {
+			fmt.Printf("ChargingState: %v\n", err)
+			return
+		} else {
+			fmt.Printf("Charging: %t\n", isCharging)
+		}
+
+		sendState(conf, soc, isCharging)
+
 	}
 }
 
-func sendSoCState(conf config, soc float64) {
+func sendState(conf config, soc float64, isCharging bool) {
 	abrpKey := conf.Abrp.Key
 	abrpToken := conf.Abrp.Token
 
 	HTTPHelper := util.NewHTTPHelper(util.NewLogger("abrp"))
-	/*
-		client := &http.Client{
-			Timeout: HTTPHelper.Client.Timeout,
-		}
-	*/
 
 	now := time.Now()
 	utc := now.Unix()
@@ -87,8 +95,9 @@ func sendSoCState(conf config, soc float64) {
 	fmt.Printf("Sending at %v\n", now)
 
 	tlmData := &TlmData{
-		Utc: strconv.FormatInt(utc, 10),
-		Soc: strconv.FormatFloat(soc, 'f', 1, 64),
+		Utc:        strconv.FormatInt(utc, 10),
+		Soc:        strconv.FormatFloat(soc, 'f', 1, 64),
+		Ischarging: isCharging,
 	}
 
 	b, err := json.Marshal(tlmData)
@@ -110,21 +119,19 @@ func sendSoCState(conf config, soc float64) {
 	reqSend.URL.RawQuery = sendData.Encode()
 
 	reqSend.Header.Set("Authorization", fmt.Sprintf("APIKEY %s", abrpKey))
-	// reqSend.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	var pr ABRPPostResponse
 	_, err = HTTPHelper.RequestJSON(reqSend, &pr)
 
-	//	respSend, err := client.Do(reqSend)
 	if err != nil {
-		fmt.Printf("Error sending SoC: %v\n", err)
+		fmt.Printf("Error sending data: %v\n", err)
 		return
 	}
 
 	if pr.Status != "ok" {
-		fmt.Printf("Error sending SoC: %v\n", pr.Result)
+		fmt.Printf("Error sending data: %v\n", pr.Result)
 		return
 	} else {
-		fmt.Printf("Success sending SoC: %v\n", pr.Result)
+		fmt.Printf("Success sending data: %v\n", pr.Result)
 	}
 }

@@ -80,4 +80,5 @@ type Vehicle interface {
 	Title() string
 	Capacity() int64
 	ChargeState() (float64, error)
+	ChargingState() (bool, error)
 }

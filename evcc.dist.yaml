@@ -115,7 +115,7 @@ vehicles:
 
 # A Better Route Planner (ABRP) configuration
 #abrp:
-#  key: 12345 # ABRP API key used for sending SoC values for a given vehicle
+#  key: 12345 # ABRP API key used for sending data for a given vehicle
 #  token: 12345 # ABRP User Token
   
 # site describes the EVU connection, PV and home battery

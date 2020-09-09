@@ -319,3 +319,7 @@ func (v *Renault) chargeState() (float64, error) {
 func (v *Renault) ChargeState() (float64, error) {
 	return v.chargeStateG()
 }
+
+func (v *Renault) ChargingState() (bool, error) {
+	return false, nil
+}

@@ -114,3 +114,7 @@ func (v *Tesla) ChargedEnergy() (float64, error) {
 // 	}
 // 	return state.ChargerPower, err
 // }
+
+func (v *Tesla) ChargingState() (bool, error) {
+	return false, nil
+}

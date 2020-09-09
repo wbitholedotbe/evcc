@@ -177,3 +177,7 @@ func (v *BMW) chargeState() (float64, error) {
 func (v *BMW) ChargeState() (float64, error) {
 	return v.chargeStateG()
 }
+
+func (v *BMW) ChargingState() (bool, error) {
+	return false, nil
+}

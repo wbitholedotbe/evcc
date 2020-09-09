@@ -392,3 +392,7 @@ func (v *Kia) chargeState() (float64, error) {
 func (v *Kia) ChargeState() (float64, error) {
 	return v.chargeG()
 }
+
+func (v *Kia) ChargingState() (bool, error) {
+	return false, nil
+}

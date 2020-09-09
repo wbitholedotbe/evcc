@@ -64,3 +64,7 @@ func (v *Nissan) chargeState() (float64, error) {
 func (v *Nissan) ChargeState() (float64, error) {
 	return v.chargeStateG()
 }
+
+func (v *Nissan) ChargingState() (bool, error) {
+	return false, nil
+}

@@ -26,6 +26,7 @@ const (
 	porscheAPIAuth        = "https://login.porsche.com/as/authorization.oauth2"
 	porscheAPIToken       = "https://login.porsche.com/as/token.oauth2"
 	porscheAPI            = "https://connect-portal.porsche.com/core/api/v3/de/de_DE"
+	porscheEmobiltyAPI    = "https://connect-portal.porsche.com/service_vehicle/api/v1/de/de_DE/e-mobility/J1"
 )
 
 type porscheTokenResponse struct {
@@ -45,6 +46,16 @@ type porscheVehicleResponse struct {
 			Unit  string
 			Value float64
 		}
+	}
+}
+
+type porscheEmobiltyResponse struct {
+	BatteryChargeStatus struct {
+		ChargingState             string
+		ChargingMode              string
+		StateOfChargeInPercentage float64
+		ChargingPower             float64
+		ChargingInDCMode          bool
 	}
 }
 
@@ -251,4 +262,27 @@ func (v *Porsche) chargeState() (float64, error) {
 // ChargeState implements the Vehicle.ChargeState interface
 func (v *Porsche) ChargeState() (float64, error) {
 	return v.chargeStateG()
+}
+
+func (v *Porsche) ChargingState() (bool, error) {
+	uri := fmt.Sprintf("%s/%s", porscheEmobiltyAPI, v.vin)
+	req, err := v.request(uri)
+	if err != nil {
+		return false, err
+	}
+
+	parameter := url.Values{
+		"timezone": []string{"Europe/Berlin"},
+	}
+	req.URL.RawQuery = parameter.Encode()
+
+	var pr porscheEmobiltyResponse
+	_, err = v.RequestJSON(req, &pr)
+
+	var isCharging = false
+	if pr.BatteryChargeStatus.ChargingState == "CHARGING" {
+		isCharging = true
+	}
+
+	return isCharging, err
 }

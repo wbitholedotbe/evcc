@@ -74,3 +74,7 @@ func NewConfigurableFromConfig(other map[string]interface{}) (api.Vehicle, error
 func (m *Vehicle) ChargeState() (float64, error) {
 	return m.chargeG()
 }
+
+func (v *Vehicle) ChargingState() (bool, error) {
+	return false, nil
+}

@@ -175,3 +175,7 @@ func (v *Audi) chargeState() (float64, error) {
 func (v *Audi) ChargeState() (float64, error) {
 	return v.chargeStateG()
 }
+
+func (v *Audi) ChargingState() (bool, error) {
+	return false, nil
+}
