@@ -28,16 +28,14 @@ type ServiceDescription struct {
 
 // Service is the ship service
 type Service struct {
-	*zeroconf.ServiceEntry
 	ServiceDescription
+	URI  string
 	conn *websocket.Conn
 }
 
 // NewFromDNSEntry creates ship service from its DNS definition
 func NewFromDNSEntry(zc *zeroconf.ServiceEntry) (*Service, error) {
-	ss := Service{
-		ServiceEntry: zc,
-	}
+	ss := Service{}
 
 	txtM := make(map[string]interface{})
 	for _, txtE := range zc.Text {
@@ -48,7 +46,7 @@ func NewFromDNSEntry(zc *zeroconf.ServiceEntry) (*Service, error) {
 	}
 
 	decoderConfig := &mapstructure.DecoderConfig{
-		Result:           &ss,
+		Result:           &ss.ServiceDescription,
 		WeaklyTypedInput: true,
 	}
 
@@ -57,7 +55,20 @@ func NewFromDNSEntry(zc *zeroconf.ServiceEntry) (*Service, error) {
 		err = decoder.Decode(txtM)
 	}
 
+	ss.URI = baseURIFromDNS(zc) + ss.ServiceDescription.Path
+
 	return &ss, err
+}
+
+// baseURIFromDNS returns the service URI
+func baseURIFromDNS(zc *zeroconf.ServiceEntry) string {
+	uri := shipScheme + zc.HostName
+	if zc.Port != 443 {
+		uri += fmt.Sprintf(":%d", zc.Port)
+	}
+	fmt.Println("uri: " + uri)
+
+	return uri
 }
 
 func (ss *Service) writeBinary(msg []byte) error {
@@ -101,16 +112,6 @@ func (ss *Service) readJSON(jsonMsg interface{}) error {
 	return err
 }
 
-// URI returns the service URI
-func (ss *Service) URI() string {
-	uri := shipScheme + ss.HostName
-	if ss.Port != 443 {
-		uri += fmt.Sprintf(":%d", ss.Port)
-	}
-	uri += ss.Path
-	return uri
-}
-
 // DefaultConnector is the connector used for establishing new websocket connections
 var DefaultConnector = defaultWebsocketConnector
 
@@ -132,10 +133,7 @@ func defaultWebsocketConnector(uri string) (*websocket.Conn, error) {
 
 // Connect connects to the service endpoint and performs protocol handshake
 func (ss *Service) Connect() error {
-	uri := ss.URI()
-	fmt.Println("uri: " + uri)
-
-	conn, err := DefaultConnector(uri)
+	conn, err := DefaultConnector(ss.URI)
 	if err != nil {
 		return err
 	}

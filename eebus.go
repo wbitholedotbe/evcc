@@ -20,7 +20,7 @@ func discoverDNS(results <-chan *zeroconf.ServiceEntry) {
 		ss, err := ship.NewFromDNSEntry(entry)
 		if err == nil {
 			err = ss.Connect()
-			log.Printf("%s: %+v", ss.HostName, ss)
+			log.Printf("%s: %+v", entry.HostName, ss)
 		}
 
 		if err == nil {
