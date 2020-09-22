@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/andig/evcc/hems/eebus/ship"
+	"github.com/andig/evcc/hems/eebus"
 	"github.com/grandcat/zeroconf"
 )
 
@@ -17,7 +17,7 @@ const (
 func discoverDNS(results <-chan *zeroconf.ServiceEntry) {
 	for entry := range results {
 		// log.Printf("%+v", entry)
-		ss, err := ship.NewFromDNSEntry(entry)
+		ss, err := eebus.NewFromDNSEntry(entry)
 		if err == nil {
 			err = ss.Connect()
 			log.Printf("%s: %+v", entry.HostName, ss)
