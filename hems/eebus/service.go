@@ -1,21 +1,18 @@
 package ship
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/andig/evcc/hems/eebus/ship"
 	"github.com/gorilla/websocket"
 	"github.com/grandcat/zeroconf"
 	"github.com/mitchellh/mapstructure"
 )
 
-const (
-	shipScheme          = "wss://"
-	cmiReadWriteTimeout = 10 * time.Second
-)
+const shipScheme = "wss://"
 
 // ServiceDescription contains the ship service parameters
 type ServiceDescription struct {
@@ -30,7 +27,7 @@ type ServiceDescription struct {
 type Service struct {
 	ServiceDescription
 	URI  string
-	conn *websocket.Conn
+	Conn *ship.Connection
 }
 
 // NewFromDNSEntry creates ship service from its DNS definition
@@ -71,47 +68,6 @@ func baseURIFromDNS(zc *zeroconf.ServiceEntry) string {
 	return uri
 }
 
-func (ss *Service) writeBinary(msg []byte) error {
-	err := ss.conn.SetWriteDeadline(time.Now().Add(cmiReadWriteTimeout))
-	if err == nil {
-		ss.conn.WriteMessage(websocket.BinaryMessage, msg)
-	}
-	return err
-}
-
-func (ss *Service) writeJSON(jsonMsg interface{}) error {
-	msg, err := json.Marshal(jsonMsg)
-	if err != nil {
-		return err
-	}
-
-	return ss.writeBinary(msg)
-}
-
-func (ss *Service) readBinary() ([]byte, error) {
-	err := ss.conn.SetReadDeadline(time.Now().Add(cmiReadWriteTimeout))
-	if err != nil {
-		return nil, err
-	}
-
-	typ, msg, err := ss.conn.ReadMessage()
-
-	if err == nil && typ != websocket.BinaryMessage {
-		err = fmt.Errorf("invalid message type: %d", typ)
-	}
-
-	return msg, err
-}
-
-func (ss *Service) readJSON(jsonMsg interface{}) error {
-	msg, err := ss.readBinary()
-	if err == nil {
-		err = json.Unmarshal(msg, &jsonMsg)
-	}
-
-	return err
-}
-
 // DefaultConnector is the connector used for establishing new websocket connections
 var DefaultConnector = defaultWebsocketConnector
 
@@ -131,34 +87,19 @@ func defaultWebsocketConnector(uri string) (*websocket.Conn, error) {
 	return conn, err
 }
 
-// Connect connects to the service endpoint and performs protocol handshake
+// Connect connects to the service endpoint and performs handshake
 func (ss *Service) Connect() error {
 	conn, err := DefaultConnector(ss.URI)
 	if err != nil {
 		return err
 	}
-	ss.conn = conn
 
-	// handshake
-	err = ss.handshake()
-	if err == nil {
-		err = ss.hello()
-	}
-	if err == nil {
-		err = ss.protocolHandshake()
-	}
+	ss.Conn = ship.New(conn)
 
-	// close connection if handshake or hello fails
-	if err != nil {
-		_ = ss.conn.Close()
-	}
-
-	return err
+	return ss.Conn.Connect()
 }
 
 // Close closes the service connection
 func (ss *Service) Close() error {
-	err := ss.close()
-	_ = ss.conn.Close()
-	return err
+	return ss.Conn.Close()
 }

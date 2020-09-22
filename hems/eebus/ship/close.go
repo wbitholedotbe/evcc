@@ -30,7 +30,7 @@ type ConnectionClose struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
-func (ss *Service) close() error {
+func (c *Connection) close() error {
 	// always send READY
 	errC := make(chan error)
 	go func(errC chan<- error) {
@@ -41,7 +41,7 @@ func (ss *Service) close() error {
 			},
 		}
 
-		if err := ss.writeJSON(msg); err != nil {
+		if err := c.writeJSON(msg); err != nil {
 			errC <- fmt.Errorf("close send failed: %w", err)
 		}
 	}(errC)
@@ -58,7 +58,7 @@ func (ss *Service) close() error {
 			case <-closeC:
 				return
 			default:
-				err := ss.readJSON(&msg)
+				err := c.readJSON(&msg)
 				if err == nil {
 					readC <- msg
 				} else {

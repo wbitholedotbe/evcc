@@ -33,16 +33,16 @@ type CmiHandshakeMsg struct {
 	ProtocolHandshake `json:"messageProtocolHandshake"`
 }
 
-func (ss *Service) handshake() error {
+func (c *Connection) handshake() error {
 	init := []byte{CmiTypeInit, CmiTypeInit}
 
 	// CMI_STATE_CLIENT_SEND
-	if err := ss.writeBinary(init); err != nil {
+	if err := c.writeBinary(init); err != nil {
 		return err
 	}
 
 	// CMI_STATE_CLIENT_EVALUATE
-	msg, err := ss.readBinary()
+	msg, err := c.readBinary()
 	if err != nil {
 		return err
 	}
@@ -55,11 +55,11 @@ func (ss *Service) handshake() error {
 	return nil
 }
 
-func (ss *Service) hello() (err error) {
+func (c *Connection) hello() (err error) {
 	// send ABORT if hello fails
 	defer func() {
 		if err != nil {
-			_ = ss.writeJSON(CmiHelloMsg{
+			_ = c.writeJSON(CmiHelloMsg{
 				ConnectionHello{Phase: CmiHelloPhaseAborted},
 			})
 		}
@@ -72,7 +72,7 @@ func (ss *Service) hello() (err error) {
 			ConnectionHello{Phase: CmiHelloPhaseReady},
 		}
 
-		if err := ss.writeJSON(msg); err != nil {
+		if err := c.writeJSON(msg); err != nil {
 			errC <- fmt.Errorf("hello send failed: %w", err)
 		}
 	}(errC)
@@ -89,7 +89,7 @@ func (ss *Service) hello() (err error) {
 			case <-closeC:
 				return
 			default:
-				err := ss.readJSON(&msg)
+				err := c.readJSON(&msg)
 				if err == nil {
 					readC <- msg
 				} else {

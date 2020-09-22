@@ -34,7 +34,7 @@ type CmiProtocolHandshakeError struct {
 	Error int `json:"error"`
 }
 
-func (ss *Service) protocolHandshake() error {
+func (c *Connection) protocolHandshake() error {
 	req := CmiHandshakeMsg{
 		ProtocolHandshake: ProtocolHandshake{
 			HandshakeType: ProtocolHandshakeTypeAnnounceMax,
@@ -43,11 +43,11 @@ func (ss *Service) protocolHandshake() error {
 		},
 	}
 
-	err := ss.writeJSON(req)
+	err := c.writeJSON(req)
 
 	var resp CmiHandshakeMsg
 	if err == nil {
-		err = ss.readJSON(&resp)
+		err = c.readJSON(&resp)
 	}
 
 	if err == nil {
@@ -57,11 +57,11 @@ func (ss *Service) protocolHandshake() error {
 			msg := CmiProtocolHandshakeError{
 				Error: CmiProtocolHandshakeErrorUnexpectedMessage,
 			}
-			_ = ss.writeJSON(msg)
+			_ = c.writeJSON(msg)
 			err = errors.New("invalid protocol handshake response")
 		} else {
 			// send selection back to server
-			err = ss.writeJSON(resp)
+			err = c.writeJSON(resp)
 		}
 	}
 
