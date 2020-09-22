@@ -18,6 +18,7 @@ require (
 	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2
+	github.com/grandcat/zeroconf v1.0.0
 	github.com/gregdel/pushover v0.0.0-20200416074932-c8ad547caed4
 	github.com/grid-x/modbus v0.0.0-20200831145459-cb26bc3b5d3d // indirect
 	github.com/hashicorp/go-version v1.2.1
