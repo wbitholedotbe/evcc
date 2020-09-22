@@ -23,6 +23,10 @@ func discoverDNS(results <-chan *zeroconf.ServiceEntry) {
 			log.Printf("%s: %+v", ss.HostName, ss)
 		}
 
+		if err == nil {
+			err = ss.Close()
+		}
+
 		if err != nil {
 			log.Println(err)
 		}
