@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/andig/evcc/hems/semp"
+
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
@@ -128,7 +130,11 @@ func createCertificate(isCA bool, hosts ...string) tls.Certificate {
 }
 
 func SelfSigned(uri string) (*websocket.Conn, error) {
-	tlsClientCert := createCertificate(false)
+	ips := semp.LocalIPs()
+	ip := ips[0]
+	log.Println("using ip: " + ip.String())
+
+	tlsClientCert := createCertificate(false, ip.String())
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
