@@ -13,6 +13,8 @@ const (
 
 	ProtocolHandshakeTypeAnnounceMax = "announceMax"
 	ProtocolHandshakeTypeSelect      = "select"
+
+	SubProtocol = "ship"
 )
 
 type ProtocolHandshake struct {

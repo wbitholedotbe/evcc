@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/andig/evcc/hems/eebus/ship"
 	"github.com/andig/evcc/hems/semp"
 
 	"bytes"
@@ -148,7 +149,10 @@ func SelfSigned(uri string) (*websocket.Conn, error) {
 			Certificates:       []tls.Certificate{tlsClientCert},
 			InsecureSkipVerify: true,
 		},
+		Subprotocols: []string{ship.SubProtocol},
 	}
+
+	log.Println("using uri: " + uri)
 
 	conn, resp, err := dialer.Dial(uri, http.Header{})
 	fmt.Println(resp)
