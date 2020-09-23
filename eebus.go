@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -74,7 +75,7 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 	}
 }
 
-func createCertificate() tls.Certificate {
+func createCertificate(isCA bool, hosts ...string) tls.Certificate {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		log.Fatal(err)
@@ -92,20 +93,17 @@ func createCertificate() tls.Certificate {
 		BasicConstraintsValid: true,
 	}
 
-	/*
-	   hosts := strings.Split(*host, ",")
-	   for _, h := range hosts {
-	   	if ip := net.ParseIP(h); ip != nil {
-	   		template.IPAddresses = append(template.IPAddresses, ip)
-	   	} else {
-	   		template.DNSNames = append(template.DNSNames, h)
-	   	}
-	   }
-	   if *isCA {
-	   	template.IsCA = true
-	   	template.KeyUsage |= x509.KeyUsageCertSign
-	   }
-	*/
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+	if isCA {
+		template.IsCA = true
+		template.KeyUsage |= x509.KeyUsageCertSign
+	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
 	if err != nil {
@@ -130,7 +128,7 @@ func createCertificate() tls.Certificate {
 }
 
 func SelfSigned(uri string) (*websocket.Conn, error) {
-	tlsClientCert := createCertificate()
+	tlsClientCert := createCertificate(false)
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
