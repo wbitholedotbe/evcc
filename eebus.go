@@ -134,12 +134,17 @@ func SelfSigned(uri string) (*websocket.Conn, error) {
 	ip := ips[0]
 	log.Println("using ip: " + ip.String())
 
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	tlsClientCert := createCertificate(false, ip.String())
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
-			// RootCAs:      caCertPool,
+			RootCAs:            certPool,
 			Certificates:       []tls.Certificate{tlsClientCert},
 			InsecureSkipVerify: true,
 		},
