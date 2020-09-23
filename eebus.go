@@ -134,7 +134,8 @@ func SelfSigned(uri string) (*websocket.Conn, error) {
 		HandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			// RootCAs:      caCertPool,
-			Certificates: []tls.Certificate{tlsClientCert},
+			Certificates:       []tls.Certificate{tlsClientCert},
+			InsecureSkipVerify: true,
 		},
 	}
 
