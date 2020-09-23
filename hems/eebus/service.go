@@ -68,8 +68,8 @@ func baseURIFromDNS(zc *zeroconf.ServiceEntry) string {
 	return uri
 }
 
-// DefaultConnector is the connector used for establishing new websocket connections
-var DefaultConnector = defaultWebsocketConnector
+// Connector is the connector used for establishing new websocket connections
+var Connector = defaultWebsocketConnector
 
 func defaultWebsocketConnector(uri string) (*websocket.Conn, error) {
 	dialer := &websocket.Dialer{
@@ -89,7 +89,7 @@ func defaultWebsocketConnector(uri string) (*websocket.Conn, error) {
 
 // Connect connects to the service endpoint and performs handshake
 func (ss *Service) Connect() error {
-	conn, err := DefaultConnector(ss.URI)
+	conn, err := Connector(ss.URI)
 	if err != nil {
 		return err
 	}
