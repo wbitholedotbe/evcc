@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -31,7 +30,6 @@ const (
 
 func discoverDNS(results <-chan *zeroconf.ServiceEntry) {
 	for entry := range results {
-		// log.Printf("%+v", entry)
 		ss, err := eebus.NewFromDNSEntry(entry)
 		if err == nil {
 			err = ss.Connect()
@@ -144,25 +142,58 @@ func SelfSigned(uri string) (*websocket.Conn, error) {
 	return conn, err
 }
 
-func main() {
-	// Discover all services on the network (e.g. _workstation._tcp)
-	resolver, err := zeroconf.NewResolver(nil)
+func server(host, port string) {
+	tlsServerCert := createCertificate(false, host)
+	tlsConfig := tls.Config{
+		Certificates: []tls.Certificate{tlsServerCert},
+	}
+
+	addr := host + ":" + port
+	srv := http.Server{
+		Addr:      addr,
+		TLSConfig: &tlsConfig,
+	}
+
+	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
-		log.Fatalln("Failed to initialize resolver:", err.Error())
+		log.Fatal(err)
 	}
 
-	// created signed connections
-	eebus.Connector = SelfSigned
+	defer ln.Close()
 
-	entries := make(chan *zeroconf.ServiceEntry)
-	go discoverDNS(entries)
+	tlsListener := tls.NewListener(ln, &tlsConfig)
+	srv.Serve(tlsListener)
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	defer cancel()
+func client(uri string) {
+	tlsClientCert := createCertificate(false)
+	tlsConfig := &tls.Config{
+		Certificates:       []tls.Certificate{tlsClientCert},
+		InsecureSkipVerify: true,
+		// RootCAs:      caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
 
-	if err = resolver.Browse(ctx, zeroconfType, zeroconfDomain, entries); err != nil {
-		log.Fatalln("Failed to browse:", err.Error())
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	client := &http.Client{Transport: transport}
+
+	resp, err := client.Get(uri)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	<-ctx.Done()
+	log.Println(resp.Status)
+}
+
+func main() {
+	host := "localhost"
+	port := "8443"
+	go server(host, port)
+
+	time.Sleep(time.Second)
+
+	uri := "https://" + host + ":" + port
+	client(uri)
+
+	time.Sleep(5 * time.Second)
 }
