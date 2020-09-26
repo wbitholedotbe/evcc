@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -89,12 +88,7 @@ func main() {
 			tlsConn := tls.Client(conn, cfg)
 			err = tlsConn.Handshake()
 			if err != nil {
-				e := err.Error()
-				if !strings.Contains(e, "handshake failure") && !strings.Contains(e, "illegal parameter") {
-					fmt.Printf("\t%-45s [NOT SUPPORTED] %s\n", c.name, err)
-				} else {
-					fmt.Printf("\t%-45s [NOT SUPPORTED]\n", c.name)
-				}
+				fmt.Printf("\t%-45s [NOT SUPPORTED] %s\n", c.name, err)
 			} else {
 				fmt.Printf("\t%-45s [OK]\n", c.name)
 			}
