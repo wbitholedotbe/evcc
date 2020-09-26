@@ -64,7 +64,7 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 }
 
 func createCertificate(isCA bool, hosts ...string) tls.Certificate {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	priv, err := rsa.GenerateKey(rand.Reader, 512)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -181,6 +181,7 @@ func connect(uri string) {
 
 	ip := ips[0].String()
 	fmt.Println("using: " + ip)
+	fmt.Println("server: " + srvName)
 
 	tlsClientCert := createCertificate(false, ip)
 	tlsConfig := &tls.Config{
@@ -188,11 +189,11 @@ func connect(uri string) {
 		InsecureSkipVerify: insecure,
 		ServerName:         srvName,
 	}
-	tlsConfig.BuildNameToCertificate()
+	// tlsConfig.BuildNameToCertificate()
 
 	conn, err := tls.Dial("tcp", uri, tlsConfig)
 	if err != nil {
-		panic("failed to connect: " + err.Error())
+		log.Fatal("failed to connect: " + err.Error())
 	}
 	println("done")
 
