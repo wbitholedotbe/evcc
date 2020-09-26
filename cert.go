@@ -161,7 +161,10 @@ func client(uri string) {
 	// 	log.Fatal(err)
 	// }
 
-	tlsClientCert := createCertificate(false, ips[0].String())
+	ip := ips[0].String()
+	println("using: " + ip)
+
+	tlsClientCert := createCertificate(false, ip)
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{tlsClientCert},
 		InsecureSkipVerify: true,
