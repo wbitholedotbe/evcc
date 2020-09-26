@@ -185,7 +185,7 @@ func connect(uri string) {
 	fmt.Println("using: " + ip)
 	fmt.Println("server: " + srvName)
 
-	tlsClientCert := createCertificate(false, ip)
+	tlsClientCert := createCertificate(false, "mycert", ip)
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{tlsClientCert},
 		InsecureSkipVerify: insecure,
