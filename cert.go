@@ -99,11 +99,11 @@ func createCertificate(isCA bool, hosts ...string) tls.Certificate {
 
 	out := &bytes.Buffer{}
 	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	fmt.Println(out.String())
+	// fmt.Println(out.String())
 
 	out.Reset()
 	pem.Encode(out, pemBlockForKey(priv))
-	fmt.Println(out.String())
+	// fmt.Println(out.String())
 
 	// tls.LoadX509KeyPair(certFile, keyFile)
 	tlsCert := tls.Certificate{
@@ -175,7 +175,7 @@ func client(uri string) {
 }
 
 func connect(uri string) {
-	tlsClientCert := createCertificate(false, "me")
+	tlsClientCert := createCertificate(false, "")
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{tlsClientCert},
 		InsecureSkipVerify: insecure,
