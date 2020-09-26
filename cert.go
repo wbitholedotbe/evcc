@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"os"
 
+	"github.com/andig/evcc/hems/semp"
 	"github.com/gorilla/websocket"
 	"github.com/grandcat/zeroconf"
 )
@@ -155,7 +156,12 @@ func server(host, port string) {
 }
 
 func client(uri string) {
-	tlsClientCert := createCertificate(false)
+	ips := semp.LocalIPs()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	tlsClientCert := createCertificate(false, ips[0].String())
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{tlsClientCert},
 		InsecureSkipVerify: true,
