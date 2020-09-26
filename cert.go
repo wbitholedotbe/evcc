@@ -31,7 +31,7 @@ const (
 
 func discoverDNS(results <-chan *zeroconf.ServiceEntry) {
 	for entry := range results {
-		fmt.Printtf("%+v\n", entry)
+		fmt.Printf("%+v\n", entry)
 	}
 }
 
