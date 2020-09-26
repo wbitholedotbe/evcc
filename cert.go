@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 	"math/big"
 	"os"
 
-	"github.com/andig/evcc/hems/eebus"
 	"github.com/gorilla/websocket"
 	"github.com/grandcat/zeroconf"
 )
@@ -31,19 +31,7 @@ const (
 
 func discoverDNS(results <-chan *zeroconf.ServiceEntry) {
 	for entry := range results {
-		ss, err := eebus.NewFromDNSEntry(entry)
-		if err == nil {
-			err = ss.Connect()
-			log.Printf("%s: %+v", entry.HostName, ss)
-		}
-
-		if err == nil {
-			err = ss.Close()
-		}
-
-		if err != nil {
-			log.Println(err)
-		}
+		fmt.Printtf("%+v\n", entry)
 	}
 }
 
@@ -227,6 +215,25 @@ func main() {
 	flag.BoolVar(&insecure, "insecure", false, "skip certificate verification")
 	flag.Parse()
 
-	uri := host + ":" + port
-	connect(uri)
+	if host != "" {
+		uri := host + ":" + port
+		connect(uri)
+		return
+	}
+
+	entries := make(chan *zeroconf.ServiceEntry)
+	go discoverDNS(entries)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+
+	// Discover all services on the network (e.g. _workstation._tcp)
+	resolver, err := zeroconf.NewResolver(nil)
+	if err != nil {
+		log.Fatalln("Failed to initialize resolver:", err.Error())
+	}
+
+	if err := resolver.Browse(ctx, zeroconfType, zeroconfDomain, entries); err != nil {
+		log.Fatalln("Failed to browse:", err.Error())
+	}
 }
