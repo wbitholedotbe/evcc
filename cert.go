@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -87,7 +88,7 @@ func createCertificate(isCA bool, hosts ...string) tls.Certificate {
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(time.Hour * 24 * 180),
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 	}
 
@@ -185,15 +186,47 @@ func client(uri string) {
 	log.Println(resp.Status)
 }
 
+func connect(uri string) {
+	tlsClientCert := createCertificate(false, "me")
+	tlsConfig := &tls.Config{
+		Certificates:       []tls.Certificate{tlsClientCert},
+		InsecureSkipVerify: insecure,
+		ServerName:         srvName,
+	}
+	tlsConfig.BuildNameToCertificate()
+
+	conn, err := tls.Dial("tcp", uri, tlsConfig)
+	if err != nil {
+		panic("failed to connect: " + err.Error())
+	}
+	println("done")
+
+	conn.Close()
+}
+
+var (
+	host     string
+	port     string
+	srvName  string
+	insecure bool
+)
+
 func main() {
-	host := "localhost"
-	port := "8443"
-	go server(host, port)
+	// host := "localhost"
+	// port := "8443"
+	// go server(host, port)
 
-	time.Sleep(time.Second)
+	// time.Sleep(time.Second)
 
-	uri := "https://" + host + ":" + port
-	client(uri)
+	// uri := "https://" + host + ":" + port
+	// client(uri)
 
-	time.Sleep(5 * time.Second)
+	flag.StringVar(&srvName, "server", "", "server")
+	flag.StringVar(&host, "host", "", "host")
+	flag.StringVar(&port, "port", "4711", "port")
+	flag.BoolVar(&insecure, "insecure", false, "skip certificate verification")
+	flag.Parse()
+
+	uri := host + ":" + port
+	connect(uri)
 }
