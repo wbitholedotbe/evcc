@@ -84,6 +84,7 @@ func createCertificate(isCA bool, hosts ...string) tls.Certificate {
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
+			template.DNSNames = append(template.DNSNames, h)
 		} else {
 			template.DNSNames = append(template.DNSNames, h)
 		}
