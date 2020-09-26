@@ -156,15 +156,7 @@ func server(host, port string) {
 }
 
 func client(uri string) {
-	ips := semp.LocalIPs()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	ip := ips[0].String()
-	println("using: " + ip)
-
-	tlsClientCert := createCertificate(false, ip)
+	tlsClientCert := createCertificate(false)
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{tlsClientCert},
 		InsecureSkipVerify: true,
@@ -184,7 +176,12 @@ func client(uri string) {
 }
 
 func connect(uri string) {
-	tlsClientCert := createCertificate(false, "")
+	ips := semp.LocalIPs()
+
+	ip := ips[0].String()
+	fmt.Println("using: " + ip)
+
+	tlsClientCert := createCertificate(false, ip)
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{tlsClientCert},
 		InsecureSkipVerify: insecure,
