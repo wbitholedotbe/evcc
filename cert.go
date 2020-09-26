@@ -236,4 +236,6 @@ func main() {
 	if err := resolver.Browse(ctx, zeroconfType, zeroconfDomain, entries); err != nil {
 		log.Fatalln("Failed to browse:", err.Error())
 	}
+
+	<-ctx.Done()
 }
