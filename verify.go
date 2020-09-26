@@ -19,8 +19,10 @@ var (
 	// use this for Dial and Handshake
 	timeout = 10 * time.Second
 
-	host     string
-	port     string
+	host    string
+	port    string
+	srvName string
+
 	insecure bool
 )
 
@@ -57,6 +59,7 @@ var ciphers = []tlsKV{
 }
 
 func main() {
+	flag.StringVar(&srvName, "server", "", "server")
 	flag.StringVar(&host, "host", "", "host")
 	flag.StringVar(&port, "port", "443", "port")
 	flag.BoolVar(&insecure, "insecure", false, "skip certificate verification")
@@ -71,7 +74,7 @@ func main() {
 		fmt.Println("Testing", v.name)
 		for _, c := range ciphers {
 			cfg := &tls.Config{
-				ServerName:         host,
+				ServerName:         srvName,
 				InsecureSkipVerify: insecure,
 			}
 
