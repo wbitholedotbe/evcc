@@ -65,11 +65,12 @@ func NewModbusFromConfig(other map[string]interface{}) (*Modbus, error) {
 
 	// model + value configured
 	if cc.Value != "" {
+		cc.Value = modbus.ReadingName(cc.Value)
 		if err := modbus.ParseOperation(device, cc.Value, &op); err != nil {
 			return nil, fmt.Errorf("invalid value %s", cc.Value)
 		}
 
-		// if sunspec reading configured make sure model is defined or device won't be initalized
+		// if sunspec reading configured make sure model is defined or device won't be initialized
 		if op.SunSpec.Point != "" && cc.Model == "" {
 			cc.Model = "SunSpec"
 		}
@@ -78,7 +79,7 @@ func NewModbusFromConfig(other map[string]interface{}) (*Modbus, error) {
 	// register configured
 	if cc.Register.Decode != "" {
 		if op.MBMD, err = modbus.RegisterOperation(cc.Register); err != nil {
-			log.TRACE.Fatal(err)
+			return nil, err
 		}
 	}
 

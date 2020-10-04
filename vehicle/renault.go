@@ -11,6 +11,7 @@ import (
 	"github.com/andig/evcc/api"
 	"github.com/andig/evcc/provider"
 	"github.com/andig/evcc/util"
+	"github.com/andig/evcc/util/request"
 )
 
 // Credits to
@@ -72,6 +73,7 @@ type kamereonData struct {
 }
 
 type batteryAttributes struct {
+	Timestamp          string `json:"timestamp"`
 	ChargeStatus       int    `json:"chargeStatus"`
 	InstantaneousPower int    `json:"instantaneousPower"`
 	RangeHvacOff       int    `json:"rangeHvacOff"`
@@ -80,17 +82,18 @@ type batteryAttributes struct {
 	PlugStatus         int    `json:"plugStatus"`
 	LastUpdateTime     string `json:"lastUpdateTime"`
 	ChargePower        int    `json:"chargePower"`
+	RemainingTime      *int   `json:"chargingRemainingTime"`
 }
 
 // Renault is an api.Vehicle implementation for Renault cars
 type Renault struct {
 	*embed
-	*util.HTTPHelper
+	*request.Helper
 	user, password, vin string
 	gigya, kamereon     configServer
 	gigyaJwtToken       string
 	accountID           string
-	chargeStateG        func() (float64, error)
+	apiG                func() (interface{}, error)
 }
 
 func init() {
@@ -115,22 +118,26 @@ func NewRenaultFromConfig(other map[string]interface{}) (api.Vehicle, error) {
 	log := util.NewLogger("renault")
 
 	v := &Renault{
-		embed:      &embed{cc.Title, cc.Capacity},
-		HTTPHelper: util.NewHTTPHelper(log),
-		user:       cc.User,
-		password:   cc.Password,
-		vin:        cc.VIN,
+		embed:    &embed{cc.Title, cc.Capacity},
+		Helper:   request.NewHelper(log),
+		user:     cc.User,
+		password: cc.Password,
+		vin:      strings.ToUpper(cc.VIN),
 	}
 
 	err := v.apiKeys(cc.Region)
 	if err == nil {
 		err = v.authFlow()
 	}
-	if err != nil {
-		return nil, err
+
+	if err == nil && cc.VIN == "" {
+		v.vin, err = findVehicle(v.kamereonVehicles(v.accountID))
+		if err == nil {
+			log.DEBUG.Printf("found vehicle: %v", v.vin)
+		}
 	}
 
-	v.chargeStateG = provider.NewCached(v.chargeState, cc.Cache).FloatGetter()
+	v.apiG = provider.NewCached(v.batteryAPI, cc.Cache).InterfaceGetter()
 
 	return v, nil
 }
@@ -139,7 +146,7 @@ func (v *Renault) apiKeys(region string) error {
 	uri := fmt.Sprintf(keyStore, region)
 
 	var cr configResponse
-	_, err := v.GetJSON(uri, &cr)
+	err := v.GetJSON(uri, &cr)
 
 	v.gigya = cr.Servers.GigyaProd
 	v.kamereon = cr.Servers.WiredProd
@@ -170,14 +177,6 @@ func (v *Renault) authFlow() error {
 				if v.accountID == "" {
 					return errors.New("missing accountID")
 				}
-
-				// find VIN
-				if v.vin == "" {
-					v.vin, err = v.kamereonVehicles(v.accountID)
-					if v.vin == "" {
-						return errors.New("missing vin")
-					}
-				}
 			}
 		}
 	}
@@ -186,19 +185,12 @@ func (v *Renault) authFlow() error {
 }
 
 func (v *Renault) request(uri string, data url.Values, headers ...map[string]string) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	if err != nil {
-		return req, err
-	}
-	req.URL.RawQuery = data.Encode()
-
-	for _, headers := range headers {
-		for k, v := range headers {
-			req.Header.Add(k, v)
-		}
+	req, err := request.New(http.MethodGet, uri, nil, headers...)
+	if err == nil {
+		req.URL.RawQuery = data.Encode()
 	}
 
-	return req, nil
+	return req, err
 }
 
 func (v *Renault) sessionCookie(user, password string) (string, error) {
@@ -214,7 +206,7 @@ func (v *Renault) sessionCookie(user, password string) (string, error) {
 
 	var gr gigyaResponse
 	if err == nil {
-		_, err = v.RequestJSON(req, &gr)
+		err = v.DoJSON(req, &gr)
 	}
 
 	return gr.SessionInfo.CookieValue, err
@@ -232,7 +224,7 @@ func (v *Renault) personID(sessionCookie string) (string, error) {
 
 	var gr gigyaResponse
 	if err == nil {
-		_, err = v.RequestJSON(req, &gr)
+		err = v.DoJSON(req, &gr)
 	}
 
 	return gr.Data.PersonID, err
@@ -250,12 +242,12 @@ func (v *Renault) jwtToken(sessionCookie string) (string, error) {
 
 	req, err := v.request(uri, data)
 
-	var gr gigyaResponse
+	var res gigyaResponse
 	if err == nil {
-		_, err = v.RequestJSON(req, &gr)
+		err = v.DoJSON(req, &res)
 	}
 
-	return gr.IDToken, err
+	return res.IDToken, err
 }
 
 func (v *Renault) kamereonRequest(uri string) (kamereonResponse, error) {
@@ -265,59 +257,86 @@ func (v *Renault) kamereonRequest(uri string) (kamereonResponse, error) {
 		"apikey":           v.kamereon.APIKey,
 	}
 
-	var kr kamereonResponse
+	var res kamereonResponse
 	req, err := v.request(uri, data, headers)
 	if err == nil {
-		_, err = v.RequestJSON(req, &kr)
+		err = v.DoJSON(req, &res)
 	}
 
-	return kr, err
+	return res, err
 }
 
 func (v *Renault) kamereonPerson(personID string) (string, error) {
 	uri := fmt.Sprintf("%s/commerce/v1/persons/%s", v.kamereon.Target, personID)
-	kr, err := v.kamereonRequest(uri)
+	res, err := v.kamereonRequest(uri)
 
-	if len(kr.Accounts) == 0 {
+	if len(res.Accounts) == 0 {
 		return "", err
 	}
 
-	return kr.Accounts[0].AccountID, err
+	return res.Accounts[0].AccountID, err
 }
 
-func (v *Renault) kamereonVehicles(accountID string) (string, error) {
+func (v *Renault) kamereonVehicles(accountID string) ([]string, error) {
 	uri := fmt.Sprintf("%s/commerce/v1/accounts/%s/vehicles", v.kamereon.Target, accountID)
-	kr, err := v.kamereonRequest(uri)
+	res, err := v.kamereonRequest(uri)
 
+	var vehicles []string
 	if err == nil {
-		for _, v := range kr.VehicleLinks {
+		for _, v := range res.VehicleLinks {
 			if strings.ToUpper(v.Status) == "ACTIVE" {
-				return v.VIN, nil
+				vehicles = append(vehicles, v.VIN)
 			}
 		}
 	}
 
-	return "", err
+	return vehicles, err
 }
 
-// chargeState implements the Vehicle.ChargeState interface
-func (v *Renault) chargeState() (float64, error) {
-	uri := fmt.Sprintf("%s/commerce/v1/accounts/%s/kamereon/kca/car-adapter/v1/cars/%s/battery-status", v.kamereon.Target, v.accountID, v.vin)
-	kr, err := v.kamereonRequest(uri)
+// batteryAPI provides battery api response
+func (v *Renault) batteryAPI() (interface{}, error) {
+	uri := fmt.Sprintf("%s/commerce/v1/accounts/%s/kamereon/kca/car-adapter/v2/cars/%s/battery-status", v.kamereon.Target, v.accountID, v.vin)
+	res, err := v.kamereonRequest(uri)
 
 	// repeat auth if error
 	if err != nil {
 		if err = v.authFlow(); err == nil {
-			kr, err = v.kamereonRequest(uri)
+			res, err = v.kamereonRequest(uri)
 		}
 	}
 
-	return float64(kr.Data.Attributes.BatteryLevel), err
+	return res, err
 }
 
 // ChargeState implements the Vehicle.ChargeState interface
 func (v *Renault) ChargeState() (float64, error) {
-	return v.chargeStateG()
+	res, err := v.apiG()
+
+	if res, ok := res.(kamereonResponse); err == nil && ok {
+		return float64(res.Data.Attributes.BatteryLevel), nil
+	}
+
+	return 0, err
+}
+
+// FinishTime implements the Vehicle.ChargeFinishTimer interface
+func (v *Renault) FinishTime() (time.Time, error) {
+	res, err := v.apiG()
+
+	if res, ok := res.(kamereonResponse); err == nil && ok {
+		var timestamp time.Time
+		if err == nil {
+			timestamp, err = time.Parse(time.RFC3339, res.Data.Attributes.Timestamp)
+		}
+
+		if res.Data.Attributes.RemainingTime == nil {
+			return time.Time{}, api.ErrNotAvailable
+		}
+
+		return timestamp.Add(time.Duration(*res.Data.Attributes.RemainingTime) * time.Minute), err
+	}
+
+	return time.Time{}, err
 }
 
 func (v *Renault) ChargingState() (bool, error) {

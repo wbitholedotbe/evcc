@@ -1,11 +1,13 @@
 package charger
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/andig/evcc/api"
 	"github.com/andig/evcc/util"
+	"github.com/andig/evcc/util/request"
 )
 
 const (
@@ -13,13 +15,9 @@ const (
 	apiMeasurements apiFunction = "measurements"
 )
 
-// NRGResponse is the API response if status not OK
-type NRGResponse struct {
-	Message string
-}
-
 // NRGMeasurements is the /api/measurements response
 type NRGMeasurements struct {
+	Message               string `json:"omitempty"` // api message if not ok
 	ChargingEnergy        float64
 	ChargingEnergyOverAll float64
 	ChargingPower         float64
@@ -30,13 +28,14 @@ type NRGMeasurements struct {
 
 // NRGSettings is the /api/settings request/response
 type NRGSettings struct {
-	Info   NRGInfo `json:"omitempty"`
-	Values NRGValues
+	Message string  `json:",omitempty"` // api message if not ok
+	Info    NRGInfo `json:",omitempty"`
+	Values  NRGValues
 }
 
 // NRGInfo is NRGSettings.Info
 type NRGInfo struct {
-	Connected bool `json:"omitempty"`
+	Connected bool `json:",omitempty"`
 }
 
 // NRGValues is NRGSettings.Values
@@ -48,12 +47,12 @@ type NRGValues struct {
 
 // NRGChargingStatus is NRGSettings.Values.ChargingStatus
 type NRGChargingStatus struct {
-	Charging *bool `json:"omitempty"` // use pointer to allow omitting false
+	Charging *bool `json:",omitempty"` // use pointer to allow omitting false
 }
 
 // NRGChargingCurrent is NRGSettings.Values.ChargingCurrent
 type NRGChargingCurrent struct {
-	Value float64 `json:"omitempty"`
+	Value float64 `json:",omitempty"`
 }
 
 // NRGDeviceMetadata is NRGSettings.Values.DeviceMetadata
@@ -63,7 +62,8 @@ type NRGDeviceMetadata struct {
 
 // NRGKickConnect charger implementation
 type NRGKickConnect struct {
-	*util.HTTPHelper
+	*request.Helper
+	log      *util.Logger
 	uri      string
 	mac      string
 	password string
@@ -87,13 +87,14 @@ func NewNRGKickConnectFromConfig(other map[string]interface{}) (api.Charger, err
 func NewNRGKickConnect(uri, mac, password string) (*NRGKickConnect, error) {
 	log := util.NewLogger("nrgconn")
 	nrg := &NRGKickConnect{
-		HTTPHelper: util.NewHTTPHelper(log),
-		uri:        uri,
-		mac:        mac,
-		password:   password,
+		log:      log,
+		Helper:   request.NewHelper(log),
+		uri:      uri,
+		mac:      mac,
+		password: password,
 	}
 
-	nrg.HTTPHelper.Log.WARN.Println("-- experimental --")
+	nrg.log.WARN.Println("-- experimental --")
 
 	return nrg, nil
 }
@@ -102,32 +103,22 @@ func (nrg *NRGKickConnect) apiURL(api apiFunction) string {
 	return fmt.Sprintf("%s/api/%s/%s", nrg.uri, api, nrg.mac)
 }
 
-func (nrg *NRGKickConnect) getJSON(url string, result interface{}) error {
-	b, err := nrg.GetJSON(url, result)
-	if err != nil && len(b) > 0 {
-		var error NRGResponse
-		if err := json.Unmarshal(b, &error); err != nil {
-			return err
+func (nrg *NRGKickConnect) putJSON(url string, data interface{}) error {
+	req, err := request.New(http.MethodPut, url, request.MarshalJSON(data))
+
+	if err == nil {
+		var resp struct {
+			Message string
 		}
 
-		return fmt.Errorf("response: %s", error.Message)
+		if err = nrg.DoJSON(req, &resp); err != nil {
+			if resp.Message != "" {
+				return fmt.Errorf("response: %s", resp.Message)
+			}
+		}
 	}
 
 	return err
-}
-
-func (nrg *NRGKickConnect) putJSON(url string, request interface{}) error {
-	b, err := nrg.PutJSON(url, request)
-	if err != nil && len(b) == 0 {
-		return err
-	}
-
-	var error NRGResponse
-	if err := json.Unmarshal(b, &error); err != nil {
-		return err
-	}
-
-	return fmt.Errorf("response: %s", error.Message)
 }
 
 // Status implements the Charger.Status interface
@@ -137,10 +128,13 @@ func (nrg *NRGKickConnect) Status() (api.ChargeStatus, error) {
 
 // Enabled implements the Charger.Enabled interface
 func (nrg *NRGKickConnect) Enabled() (bool, error) {
-	var settings NRGSettings
-	err := nrg.getJSON(nrg.apiURL(apiSettings), &settings)
+	var res NRGSettings
+	err := nrg.GetJSON(nrg.apiURL(apiSettings), &res)
+	if err != nil && res.Message != "" {
+		err = errors.New(res.Message)
+	}
 
-	return *settings.Values.ChargingStatus.Charging, err
+	return *res.Values.ChargingStatus.Charging, err
 }
 
 // Enable implements the Charger.Enable interface
@@ -163,39 +157,48 @@ func (nrg *NRGKickConnect) MaxCurrent(current int64) error {
 
 // CurrentPower implements the Meter interface
 func (nrg *NRGKickConnect) CurrentPower() (float64, error) {
-	var measurements NRGMeasurements
-	err := nrg.getJSON(nrg.apiURL(apiMeasurements), &measurements)
+	var res NRGMeasurements
+	err := nrg.GetJSON(nrg.apiURL(apiMeasurements), &res)
+	if err != nil && res.Message != "" {
+		err = errors.New(res.Message)
+	}
 
-	return 1000 * measurements.ChargingPower, err
+	return 1000 * res.ChargingPower, err
 }
 
 // TotalEnergy implements the MeterEnergy interface
 func (nrg *NRGKickConnect) TotalEnergy() (float64, error) {
-	var measurements NRGMeasurements
-	err := nrg.getJSON(nrg.apiURL(apiMeasurements), &measurements)
+	var res NRGMeasurements
+	err := nrg.GetJSON(nrg.apiURL(apiMeasurements), &res)
+	if err != nil && res.Message != "" {
+		err = errors.New(res.Message)
+	}
 
-	return measurements.ChargingEnergyOverAll, err
+	return res.ChargingEnergyOverAll, err
 }
 
 // Currents implements the MeterCurrent interface
 func (nrg *NRGKickConnect) Currents() (float64, float64, float64, error) {
-	var measurements NRGMeasurements
-	err := nrg.getJSON(nrg.apiURL(apiMeasurements), &measurements)
-
-	if len(measurements.ChargingCurrentPhase) != 3 {
-		return 0, 0, 0, fmt.Errorf("unexpected response: %v", measurements)
+	var res NRGMeasurements
+	err := nrg.GetJSON(nrg.apiURL(apiMeasurements), &res)
+	if err != nil && res.Message != "" {
+		err = errors.New(res.Message)
 	}
 
-	return measurements.ChargingCurrentPhase[0],
-		measurements.ChargingCurrentPhase[1],
-		measurements.ChargingCurrentPhase[2],
+	if len(res.ChargingCurrentPhase) != 3 {
+		return 0, 0, 0, fmt.Errorf("unexpected response: %v", res)
+	}
+
+	return res.ChargingCurrentPhase[0],
+		res.ChargingCurrentPhase[1],
+		res.ChargingCurrentPhase[2],
 		err
 }
 
 // ChargedEnergy implements the ChargeRater interface
 // NOTE: apparently shows energy of a stopped charging session, hence substituted by TotalEnergy
 // func (nrg *NRGKickConnect) ChargedEnergy() (float64, error) {
-// 	var measurements NRGMeasurements
-// 	err := nrg.getJSON(nrg.apiURL(apiMeasurements), &measurements)
-// 	return measurements.ChargingEnergy, err
+// 	var res NRGMeasurements
+// 	err := nrg.GetJSON(nrg.apiURL(apiMeasurements), &res)
+// 	return res.ChargingEnergy, err
 // }

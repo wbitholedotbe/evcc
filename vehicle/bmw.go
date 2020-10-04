@@ -12,6 +12,7 @@ import (
 	"github.com/andig/evcc/api"
 	"github.com/andig/evcc/provider"
 	"github.com/andig/evcc/util"
+	"github.com/andig/evcc/util/request"
 )
 
 const (
@@ -26,13 +27,13 @@ type bmwDynamicResponse struct {
 }
 
 type bmwVehiclesResponse []struct {
-	Vin string `json:"vin"`
+	VIN string `json:"vin"`
 }
 
 // BMW is an api.Vehicle implementation for BMW cars
 type BMW struct {
 	*embed
-	*util.HTTPHelper
+	*request.Helper
 	user, password, vin string
 	token               string
 	tokenValid          time.Time
@@ -59,28 +60,22 @@ func NewBMWFromConfig(other map[string]interface{}) (api.Vehicle, error) {
 	log := util.NewLogger("bmw")
 
 	v := &BMW{
-		embed:      &embed{cc.Title, cc.Capacity},
-		HTTPHelper: util.NewHTTPHelper(log),
-		user:       cc.User,
-		password:   cc.Password,
-		vin:        cc.VIN,
-	}
-
-	if cc.VIN == "" {
-		vehicles, err := v.vehicles()
-		if err != nil {
-			return nil, fmt.Errorf("cannot get vehicles: %v", err)
-		}
-
-		if len(vehicles) != 1 {
-			return nil, fmt.Errorf("cannot find vehicle: %v", vehicles)
-		}
-
-		v.vin = vehicles[0].Vin
-		log.DEBUG.Printf("found vehicle: %v", v.vin)
+		embed:    &embed{cc.Title, cc.Capacity},
+		Helper:   request.NewHelper(log),
+		user:     cc.User,
+		password: cc.Password,
+		vin:      strings.ToUpper(cc.VIN),
 	}
 
 	v.chargeStateG = provider.NewCached(v.chargeState, cc.Cache).FloatGetter()
+
+	var err error
+	if cc.VIN == "" {
+		v.vin, err = findVehicle(v.vehicles())
+		if err == nil {
+			log.DEBUG.Printf("found vehicle: %v", v.vin)
+		}
+	}
 
 	return v, nil
 }
@@ -97,14 +92,13 @@ func (v *BMW) login(user, password string) error {
 		"locale":        []string{"DE-de"},
 	}
 
-	req, err := http.NewRequest(http.MethodPost, bmwAuth, strings.NewReader(data.Encode()))
+	req, err := request.New(http.MethodPost, bmwAuth, strings.NewReader(data.Encode()), request.URLEncoding)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{
-		Timeout:       v.HTTPHelper.Client.Timeout,
+		Timeout:       v.Helper.Client.Timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }, // don't follow redirects
 	}
 
@@ -146,17 +140,24 @@ func (v *BMW) request(uri string) (*http.Request, error) {
 }
 
 // vehicles implements returns the list of user vehicles
-func (v *BMW) vehicles() (bmwVehiclesResponse, error) {
+func (v *BMW) vehicles() ([]string, error) {
 	var br bmwVehiclesResponse
 	uri := fmt.Sprintf("%s/me/vehicles/v2/", bmwAPI)
 
+	var vehicles []string
+
 	req, err := v.request(uri)
-	if err != nil {
-		return br, err
+	if err == nil {
+		err = v.DoJSON(req, &br)
 	}
 
-	_, err = v.RequestJSON(req, &br)
-	return br, err
+	if err == nil {
+		for _, v := range br {
+			vehicles = append(vehicles, v.VIN)
+		}
+	}
+
+	return vehicles, err
 }
 
 // chargeState implements the Vehicle.ChargeState interface
@@ -169,7 +170,7 @@ func (v *BMW) chargeState() (float64, error) {
 		return 0, err
 	}
 
-	_, err = v.RequestJSON(req, &br)
+	err = v.DoJSON(req, &br)
 	return br.AttributesMap.ChargingLevelHv, err
 }
 

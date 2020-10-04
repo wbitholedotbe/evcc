@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -90,10 +91,10 @@ type LoadPoint struct {
 }
 
 // NewLoadPointFromConfig creates a new loadpoint
-func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[string]interface{}) *LoadPoint {
+func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[string]interface{}) (*LoadPoint, error) {
 	lp := NewLoadPoint(log)
 	if err := util.DecodeOther(other, &lp); err != nil {
-		log.FATAL.Fatal(err)
+		return nil, err
 	}
 
 	// set sane defaults
@@ -118,7 +119,7 @@ func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[strin
 	}
 
 	if lp.ChargerRef == "" {
-		lp.log.FATAL.Fatal("missing charger")
+		return nil, errors.New("missing charger")
 	}
 	charger := cp.Charger(lp.ChargerRef)
 	lp.configureChargerType(charger)
@@ -135,7 +136,7 @@ func NewLoadPointFromConfig(log *util.Logger, cp configProvider, other map[strin
 		HandlerConfig: lp.HandlerConfig,
 	}
 
-	return lp
+	return lp, nil
 }
 
 // NewLoadPoint creates a LoadPoint with sane defaults
@@ -222,9 +223,7 @@ func (lp *LoadPoint) configureChargerType(charger api.Charger) {
 		} else {
 			mt := &wrapper.ChargeMeter{}
 			_ = lp.bus.Subscribe(evChargeCurrent, lp.evChargeCurrentWrappedMeterHandler)
-			_ = lp.bus.Subscribe(evChargeStop, func() {
-				mt.SetPower(0)
-			})
+			_ = lp.bus.Subscribe(evChargeStop, func() { mt.SetPower(0) })
 			lp.chargeMeter = mt
 		}
 	}
@@ -235,7 +234,8 @@ func (lp *LoadPoint) configureChargerType(charger api.Charger) {
 	} else {
 		rt := wrapper.NewChargeRater(lp.log, lp.chargeMeter)
 		_ = lp.bus.Subscribe(evChargePower, rt.SetChargePower)
-		_ = lp.bus.Subscribe(evChargeStart, rt.StartCharge)
+		_ = lp.bus.Subscribe(evVehicleConnect, func() { rt.StartCharge(false) })
+		_ = lp.bus.Subscribe(evChargeStart, func() { rt.StartCharge(true) })
 		_ = lp.bus.Subscribe(evChargeStop, rt.StopCharge)
 		lp.chargeRater = rt
 	}
@@ -245,7 +245,8 @@ func (lp *LoadPoint) configureChargerType(charger api.Charger) {
 		lp.chargeTimer = ct
 	} else {
 		ct := wrapper.NewChargeTimer()
-		_ = lp.bus.Subscribe(evChargeStart, ct.StartCharge)
+		_ = lp.bus.Subscribe(evVehicleConnect, func() { ct.StartCharge(false) })
+		_ = lp.bus.Subscribe(evChargeStart, func() { ct.StartCharge(true) })
 		_ = lp.bus.Subscribe(evChargeStop, ct.StopCharge)
 		lp.chargeTimer = ct
 	}
@@ -286,7 +287,9 @@ func (lp *LoadPoint) evVehicleConnectHandler() {
 	lp.publish("connectedDuration", 0)
 
 	// soc estimation reset on car change
-	lp.socEstimator.Reset()
+	if lp.socEstimator != nil {
+		lp.socEstimator.Reset()
+	}
 
 	lp.notify(evVehicleConnect)
 }
@@ -596,6 +599,9 @@ func (lp *LoadPoint) publishSoC() {
 			}
 			lp.publish("chargeEstimate", chargeEstimate)
 
+			chargeRemainingEnergy := 1e3 * lp.socEstimator.RemainingChargeEnergy(lp.TargetSoC)
+			lp.publish("chargeRemainingEnergy", chargeRemainingEnergy)
+
 			return
 		}
 
@@ -603,7 +609,7 @@ func (lp *LoadPoint) publishSoC() {
 	}
 
 	lp.publish("socCharge", -1)
-	lp.publish("chargeEstimate", -1)
+	lp.publish("chargeEstimate", time.Duration(-1))
 }
 
 // Update is the main control function. It reevaluates meters and charger state

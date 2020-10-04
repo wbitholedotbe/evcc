@@ -95,3 +95,54 @@ func (c *Cached) BoolGetter() func() (bool, error) {
 		return c.val.(bool), c.err
 	}
 }
+
+// DurationGetter gets time.Duration value
+func (c *Cached) DurationGetter() func() (time.Duration, error) {
+	g, ok := c.getter.(func() (time.Duration, error))
+	if !ok {
+		c.log.FATAL.Fatalf("invalid type: %T", c.getter)
+	}
+
+	return func() (time.Duration, error) {
+		if c.clock.Since(c.updated) > c.cache {
+			c.val, c.err = g()
+			c.updated = c.clock.Now()
+		}
+
+		return c.val.(time.Duration), c.err
+	}
+}
+
+// TimeGetter gets time.Time value
+func (c *Cached) TimeGetter() func() (time.Time, error) {
+	g, ok := c.getter.(func() (time.Time, error))
+	if !ok {
+		c.log.FATAL.Fatalf("invalid type: %T", c.getter)
+	}
+
+	return func() (time.Time, error) {
+		if c.clock.Since(c.updated) > c.cache {
+			c.val, c.err = g()
+			c.updated = c.clock.Now()
+		}
+
+		return c.val.(time.Time), c.err
+	}
+}
+
+// InterfaceGetter gets interface value
+func (c *Cached) InterfaceGetter() func() (interface{}, error) {
+	g, ok := c.getter.(func() (interface{}, error))
+	if !ok {
+		c.log.FATAL.Fatalf("invalid type: %T", c.getter)
+	}
+
+	return func() (interface{}, error) {
+		if c.clock.Since(c.updated) > c.cache {
+			c.val, c.err = g()
+			c.updated = c.clock.Now()
+		}
+
+		return c.val, c.err
+	}
+}

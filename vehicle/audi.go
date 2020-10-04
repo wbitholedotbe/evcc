@@ -1,10 +1,9 @@
 package vehicle
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
@@ -12,50 +11,26 @@ import (
 	"github.com/andig/evcc/api"
 	"github.com/andig/evcc/provider"
 	"github.com/andig/evcc/util"
+	"github.com/andig/evcc/util/request"
+	"github.com/andig/evcc/vehicle/vw"
+	"golang.org/x/net/publicsuffix"
 )
-
-const (
-	audiURL        = "https://msg.audi.de/fs-car"
-	audiDE         = "Audi/DE"
-	audiAuthPrefix = "AudiAuth 1"
-)
-
-type audiTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
-}
-
-type audiErrorResponse struct {
-	Error       string
-	Description string `json:"error_description"`
-}
-
-type audiBatteryResponse struct {
-	Charger struct {
-		Status struct {
-			BatteryStatusData struct {
-				StateOfCharge struct {
-					Content int
-				}
-			}
-		}
-	}
-}
 
 // Audi is an api.Vehicle implementation for Audi cars
 type Audi struct {
 	*embed
-	*util.HTTPHelper
-	user, password, vin string
-	token               string
-	tokenValid          time.Time
-	chargeStateG        func() (float64, error)
+	*request.Helper
+	user, password string
+	tokens         vw.Tokens
+	api            *vw.API
+	apiG           func() (interface{}, error)
 }
 
 func init() {
 	registry.Add("audi", NewAudiFromConfig)
 }
+
+const audiClientID = "77869e21-e30a-4a92-b016-48ab7d3db1d8"
 
 // NewAudiFromConfig creates a new vehicle
 func NewAudiFromConfig(other map[string]interface{}) (api.Vehicle, error) {
@@ -69,111 +44,152 @@ func NewAudiFromConfig(other map[string]interface{}) (api.Vehicle, error) {
 		return nil, err
 	}
 
+	log := util.NewLogger("audi")
+
 	v := &Audi{
-		embed:      &embed{cc.Title, cc.Capacity},
-		HTTPHelper: util.NewHTTPHelper(util.NewLogger("audi")),
-		user:       cc.User,
-		password:   cc.Password,
-		vin:        cc.VIN,
+		embed:    &embed{cc.Title, cc.Capacity},
+		Helper:   request.NewHelper(log),
+		user:     cc.User,
+		password: cc.Password,
 	}
 
-	v.chargeStateG = provider.NewCached(v.chargeState, cc.Cache).FloatGetter()
+	v.api = vw.NewAPI(v.Helper, &v.tokens, v.authFlow, v.refreshHeaders, strings.ToUpper(cc.VIN), "Audi", "DE")
+	v.apiG = provider.NewCached(v.apiCall, cc.Cache).InterfaceGetter()
 
-	return v, nil
+	var err error
+	jar, err := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+
+	// track cookies and don't follow redirects
+	v.Client.Jar = jar
+	v.Client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	if err == nil {
+		err = v.authFlow()
+	}
+
+	if err == nil && cc.VIN == "" {
+		v.api.VIN, err = findVehicle(v.api.Vehicles())
+		if err == nil {
+			log.DEBUG.Printf("found vehicle: %v", v.api.VIN)
+		}
+	}
+
+	return v, err
 }
 
-func (v *Audi) apiURL(service, part string) string {
-	return fmt.Sprintf("%s/%s/%s/%s/%s", audiURL, service, "v1", audiDE, part)
-}
+func (v *Audi) authFlow() error {
+	var err error
+	var uri string
+	var req *http.Request
+	var resp *http.Response
+	var tokens vw.Tokens
 
-func (v *Audi) headers(header *http.Header) {
-	for k, v := range map[string]string{
-		"Accept":        "application/json",
-		"X-App-ID":      "de.audi.mmiapp",
-		"X-App-Name":    "MMIconnect",
-		"X-App-Version": "2.8.3",
-		"X-Brand":       "audi",
-		"X-Country-Id":  "DE",
-		"X-Language-Id": "de",
-		"X-Platform":    "google",
-		"User-Agent":    "okhttp/2.7.4",
-		"ADRUM_1":       "isModule:true",
-		"ADRUM":         "isAray:true",
-	} {
-		header.Set(k, v)
-	}
-}
+	const clientID = "09b6cbec-cd19-4589-82fd-363dfa8c24da@apps_vw-dilab_com"
+	const redirectURI = "myaudi:///"
 
-func (v *Audi) login(user, password string) error {
-	uri := v.apiURL("core/auth", "token")
+	query := url.Values(map[string][]string{
+		"response_type": {"code"},
+		"client_id":     {clientID},
+		"redirect_uri":  {redirectURI},
+		"scope":         {"address profile badge birthdate birthplace nationalIdentifier nationality profession email vin phone nickname name picture mbb gallery openid"},
+		"state":         {"7f8260b5-682f-4db8-b171-50a5189a1c08"},
+		"nonce":         {"7f8260b5-682f-4db8-b171-50a5189a1c08"},
+		"prompt":        {"login"},
+		"ui_locales":    {"de-DE"},
+	})
 
-	data := url.Values{
-		"grant_type": []string{"password"},
-		"username":   []string{user},
-		"password":   []string{password},
+	uri = "https://identity.vwgroup.io/oidc/v1/authorize?" + query.Encode()
+	if err == nil {
+		identity := &vw.Identity{Client: v.Client}
+		resp, err = identity.Login(uri, v.user, v.password)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, uri, strings.NewReader(data.Encode()))
-	if err != nil {
-		return err
-	}
+	if err == nil {
+		var code string
+		if location, err := url.Parse(resp.Header.Get("Location")); err == nil {
+			code = location.Query().Get("code")
+		}
 
-	v.headers(&req.Header)
-	req.Header.Set("Authorization", audiAuthPrefix)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		data := url.Values(map[string][]string{
+			"client_id":     {clientID},
+			"grant_type":    {"authorization_code"},
+			"code":          {code},
+			"redirect_uri":  {redirectURI},
+			"response_type": {"token id_token"},
+		})
 
-	var tr audiTokenResponse
-	if b, err := v.RequestJSON(req, &tr); err != nil {
-		if len(b) > 0 {
-			var er audiErrorResponse
-			if err = json.Unmarshal(b, &er); err == nil {
-				return errors.New(er.Description)
+		uri = "https://app-api.my.audi.com/myaudiappidk/v1/token"
+		req, err = request.New(http.MethodPost, uri, strings.NewReader(data.Encode()), request.URLEncoding)
+		if err == nil {
+			if err = v.DoJSON(req, &tokens); err == nil && tokens.IDToken == "" {
+				err = errors.New("missing id token (1)")
 			}
 		}
-		return err
 	}
 
-	v.token = tr.AccessToken
-	v.tokenValid = time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
+	if err == nil {
+		data := url.Values(map[string][]string{
+			"grant_type": {"id_token"},
+			"scope":      {"sc2:fal"},
+			"token":      {tokens.IDToken},
+		})
 
-	return nil
-}
-
-func (v *Audi) request(uri string) (*http.Request, error) {
-	if v.token == "" || time.Since(v.tokenValid) > 0 {
-		if err := v.login(v.user, v.password); err != nil {
-			return nil, err
+		req, err = request.New(http.MethodPost, vw.OauthTokenURI, strings.NewReader(data.Encode()), map[string]string{
+			"Content-Type": "application/x-www-form-urlencoded",
+			"X-Client-Id":  audiClientID,
+		})
+		if err == nil {
+			if err = v.DoJSON(req, &v.tokens); err == nil && tokens.IDToken == "" {
+				err = errors.New("missing id token (2)")
+			}
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	if err != nil {
-		return req, err
-	}
-
-	v.headers(&req.Header)
-	req.Header.Set("Authorization", fmt.Sprintf("%s %s", audiAuthPrefix, v.token))
-
-	return req, nil
+	return err
 }
 
-// chargeState implements the Vehicle.ChargeState interface
-func (v *Audi) chargeState() (float64, error) {
-	uri := v.apiURL("bs/batterycharge", fmt.Sprintf("vehicles/%s/charger", v.vin))
-	req, err := v.request(uri)
-	if err != nil {
-		return 0, err
+func (v *Audi) refreshHeaders() map[string]string {
+	return map[string]string{
+		"Content-Type":  "application/x-www-form-urlencoded",
+		"X-App-Version": "3.14.0",
+		"X-App-Name":    "myAudi",
+		"X-Client-Id":   audiClientID,
 	}
+}
 
-	var br audiBatteryResponse
-	_, err = v.RequestJSON(req, &br)
-
-	return float64(br.Charger.Status.BatteryStatusData.StateOfCharge.Content), err
+// apiCall provides charger api response
+func (v *Audi) apiCall() (interface{}, error) {
+	res, err := v.api.Charger()
+	return res, err
 }
 
 // ChargeState implements the Vehicle.ChargeState interface
 func (v *Audi) ChargeState() (float64, error) {
-	return v.chargeStateG()
+	res, err := v.apiG()
+	if res, ok := res.(vw.ChargerResponse); err == nil && ok {
+		return float64(res.Charger.Status.BatteryStatusData.StateOfCharge.Content), nil
+	}
+
+	return 0, err
+}
+
+// FinishTime implements the Vehicle.ChargeFinishTimer interface
+func (v *Audi) FinishTime() (time.Time, error) {
+	res, err := v.apiG()
+	if res, ok := res.(vw.ChargerResponse); err == nil && ok {
+		var timestamp time.Time
+		if err == nil {
+			timestamp, err = time.Parse(time.RFC3339, res.Charger.Status.BatteryStatusData.RemainingChargingTime.Timestamp)
+		}
+
+		return timestamp.Add(time.Duration(res.Charger.Status.BatteryStatusData.RemainingChargingTime.Content) * time.Minute), err
+	}
+
+	return time.Time{}, err
 }
 
 func (v *Audi) ChargingState() (bool, error) {

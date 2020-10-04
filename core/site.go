@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,6 +31,7 @@ type Site struct {
 	Voltage       float64      `mapstructure:"voltage"`       // Operating voltage. 230V for Germany.
 	ResidualPower float64      `mapstructure:"residualPower"` // PV meter only: household usage. Grid meter: household safety margin
 	Meters        MetersConfig // Meter references
+	PrioritySoC   float64      `mapstructure:"prioritySoC"` // prefer battery up to this SoC
 
 	// meters
 	gridMeter    api.Meter // Grid usage meter
@@ -57,10 +59,10 @@ func NewSiteFromConfig(
 	cp configProvider,
 	other map[string]interface{},
 	loadpoints []*LoadPoint,
-) *Site {
+) (*Site, error) {
 	site := NewSite()
 	if err := util.DecodeOther(other, &site); err != nil {
-		log.FATAL.Fatal(err)
+		return nil, err
 	}
 
 	Voltage = site.Voltage
@@ -68,10 +70,10 @@ func NewSiteFromConfig(
 
 	// configure meter from references
 	// if site.Meters.PVMeterRef == "" && site.Meters.GridMeterRef == "" {
-	// 	site.log.FATAL.Fatal("missing either pv or grid meter")
+	// 	nil, errors.New("missing either pv or grid meter")
 	// }
 	if site.Meters.GridMeterRef == "" {
-		site.log.FATAL.Fatal("missing grid meter")
+		return nil, errors.New("missing grid meter")
 	}
 	if site.Meters.GridMeterRef != "" {
 		site.gridMeter = cp.Meter(site.Meters.GridMeterRef)
@@ -83,7 +85,7 @@ func NewSiteFromConfig(
 		site.batteryMeter = cp.Meter(site.Meters.BatteryMeterRef)
 	}
 
-	return site
+	return site, nil
 }
 
 // NewSite creates a Site with sane defaults
@@ -146,7 +148,8 @@ func (site *Site) SetTargetSoC(targetSoC int) {
 	}
 }
 
-func (lp *LoadPoint) hasChargeMeter() bool {
+// HasChargeMeter determines if a physical charge meter is attached
+func (lp *LoadPoint) HasChargeMeter() bool {
 	_, isWrapped := lp.chargeMeter.(*wrapper.ChargeMeter)
 	return lp.chargeMeter != nil && !isWrapped
 }
@@ -172,7 +175,7 @@ func (site *Site) Configuration() SiteConfiguration {
 			Phases:      lp.Phases,
 			MinCurrent:  lp.MinCurrent,
 			MaxCurrent:  lp.MaxCurrent,
-			ChargeMeter: lp.hasChargeMeter(),
+			ChargeMeter: lp.HasChargeMeter(),
 		}
 
 		if lp.vehicle != nil {
@@ -215,8 +218,8 @@ func (site *Site) DumpConfig() {
 		lp.log.INFO.Printf("loadpoint %d config:", i+1)
 
 		lp.log.INFO.Printf("  vehicle %s", presence[lp.vehicle != nil])
-		lp.log.INFO.Printf("  charge %s", presence[lp.hasChargeMeter()])
-		if lp.hasChargeMeter() {
+		lp.log.INFO.Printf("  charge %s", presence[lp.HasChargeMeter()])
+		if lp.HasChargeMeter() {
 			lp.log.INFO.Println("  charge meter config:")
 			logMeter(site.log, lp.chargeMeter)
 		}
@@ -309,7 +312,23 @@ func (site *Site) sitePower() (float64, error) {
 		return 0, err
 	}
 
-	sitePower := sitePower(site.gridPower, site.batteryPower, site.ResidualPower)
+	// honour battery priority
+	batteryPower := site.batteryPower
+	if battery, ok := site.batteryMeter.(api.Battery); ok && site.PrioritySoC > 0 {
+		soc, err := battery.SoC()
+		if err != nil {
+			site.log.ERROR.Printf("updating battery soc: %v", err)
+		} else {
+			site.publish("batterySoC", soc)
+
+			if soc < site.PrioritySoC {
+				site.log.DEBUG.Printf("giving priority to battery at soc: %.0f", soc)
+				batteryPower = 0
+			}
+		}
+	}
+
+	sitePower := sitePower(site.gridPower, batteryPower, site.ResidualPower)
 	site.log.DEBUG.Printf("site power: %.0fW", sitePower)
 
 	return sitePower, nil
