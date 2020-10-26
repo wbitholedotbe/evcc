@@ -75,6 +75,7 @@
       <div class="navbar-nav">
         <router-link class="nav-item nav-link pb-1" to="/">Laden</router-link>
         <router-link class="nav-item nav-link pb-1" to="/config">Konfiguration</router-link>
+        <router-link class="nav-item nav-link pb-1" to="/test">Test</router-link>
         <a class="nav-item nav-link pb-1" href="https://github.com/andig/evcc/issues">Support</a>
       </div>
     </div>
@@ -519,6 +520,29 @@ loadpoints:
     </div>
   </div>
 </footer>
+
+<script type="text/x-template" id="test-template">
+  <div class="container">
+    TEST
+    {{current}}
+    <div class="row">
+      <div class="col" v-for="(item,key) in current">
+        <button type="button" class="btn btn-primary w-100">{{key}}</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-1">
+        <button type="button" class="btn btn-secondary w-100">_</button>
+      </div>
+      <div class="col-1">
+        <button type="button" class="btn btn-primary w-100">Site</button>
+      </div>
+      <div class="col-10">
+        foo
+      </div>
+    </div>
+  </div>
+</script>
 
 <script src="js/app.js?<<.Tag>>"></script>
 

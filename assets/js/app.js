@@ -159,9 +159,38 @@ const config = Vue.component("config", {
   },
 });
 
+const test = Vue.component("test", {
+  template: "#test-template",
+  data: function() {
+    return {
+      tree: {
+        site: {
+          grid: {},
+          pv: {},
+          battery: {},
+        },
+        loadpoint: {
+          charge: {},
+          vehicle: {},
+        },
+      },
+      currentLevel: null,
+    };
+  },
+  computed: {
+    current: function() {
+      if (this.currentLevel == null) {
+        this.currentLevel = this.tree;
+      }
+      return this.currentLevel;
+    },
+  }
+});
+
 const routes = [
   { path: "/", component: main },
   { path: "/config", component: config },
+  { path: "/test", component: test },
 ];
 
 const router = new VueRouter({
