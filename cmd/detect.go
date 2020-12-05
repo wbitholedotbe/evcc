@@ -8,7 +8,6 @@ import (
 
 	"github.com/andig/evcc/detect"
 	"github.com/andig/evcc/util"
-	"github.com/korylprince/ipnetgen"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -30,20 +29,6 @@ func init() {
 	rootCmd.AddCommand(detectCmd)
 }
 
-// IPsFromSubnet creates a list of ip addresses for given subnet
-func IPsFromSubnet(arg string) (res []string) {
-	gen, err := ipnetgen.New(arg)
-	if err != nil {
-		log.FATAL.Fatal("could not create iterator")
-	}
-
-	for ip := gen.Next(); ip != nil; ip = gen.Next() {
-		res = append(res, ip.String())
-	}
-
-	return res
-}
-
 // ParseHostIPNet converts host or cidr into a host list
 func ParseHostIPNet(arg string) (res []string) {
 	if ip := net.ParseIP(arg); ip != nil {
@@ -63,7 +48,12 @@ func ParseHostIPNet(arg string) (res []string) {
 		return
 	}
 
-	return IPsFromSubnet(arg)
+	ips, err := detect.IPsFromSubnet(arg)
+	if err != nil {
+		log.FATAL.Fatal(err)
+	}
+
+	return ips
 }
 
 func display(res []detect.Result) {
@@ -123,16 +113,21 @@ configuring EVCC but are probably not sufficient for fully automatic configurati
 
 	// autodetect
 	if len(hosts) == 0 {
-		ips := util.LocalIPs()
-		if len(ips) == 0 {
+		ipnets := util.LocalIPs()
+		if len(ipnets) == 0 {
 			log.FATAL.Fatal("could not find ip")
 		}
 
-		myIP := ips[0]
+		myIP := ipnets[0]
 		log.INFO.Println("my ip:", myIP.IP)
 
+		ips, err := detect.IPsFromSubnet(myIP.String())
+		if err != nil {
+			log.FATAL.Fatal(err)
+		}
+
 		hosts = append(hosts, "127.0.0.1")
-		hosts = append(hosts, IPsFromSubnet(myIP.String())...)
+		hosts = append(hosts, ips...)
 	}
 
 	// magic happens here
