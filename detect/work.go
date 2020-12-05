@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/andig/evcc/detect/tasks"
 	"github.com/andig/evcc/util"
 	"github.com/fatih/structs"
 	"github.com/jeremywohl/flatten"
@@ -67,7 +68,7 @@ func Work(log *util.Logger, num int, hosts []string) []Result {
 
 func postProcess(res []Result) []Result {
 	for idx, hit := range res {
-		if sma, ok := hit.Details.(SmaResult); ok {
+		if sma, ok := hit.Details.(tasks.SmaResult); ok {
 			hit.Host = sma.Addr
 		}
 

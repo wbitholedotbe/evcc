@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"errors"
@@ -10,10 +10,10 @@ import (
 )
 
 func init() {
-	registry.Add("mqtt", MqttHandlerFactory)
+	Registry.Add("mqtt", MqttHandlerFactory)
 }
 
-func MqttHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func MqttHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := MqttHandler{
 		Port:    1883,
 		Timeout: timeout,
@@ -68,7 +68,7 @@ func (h *MqttHandler) Test(log *util.Logger, ip string) []interface{} {
 	}
 
 	if ok {
-		return []interface{}{nil}
+		return success
 	}
 
 	return nil

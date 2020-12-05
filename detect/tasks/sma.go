@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"crypto/tls"
@@ -17,10 +17,10 @@ type SmaResult struct {
 }
 
 func init() {
-	registry.Add("sma", SMAHandlerFactory)
+	Registry.Add("sma", SMAHandlerFactory)
 }
 
-func SMAHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func SMAHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := SMAHandler{
 		Timeout: 5 * time.Second,
 	}

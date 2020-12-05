@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"encoding/binary"
@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	registry.Add("modbus", ModbusHandlerFactory)
+	Registry.Add("modbus", ModbusHandlerFactory)
 }
 
 type ModbusResult struct {
@@ -25,18 +25,18 @@ type ModbusResult struct {
 	Value   interface{}
 }
 
-func (r *ModbusResult) Configuration(handler TaskHandler, res Result) map[string]interface{} {
-	port := handler.(*ModbusHandler).Port
-	cc := map[string]interface{}{
-		"uri":   fmt.Sprintf("%s:%d", res.Host, port),
-		"model": "sunspec",
-		"id":    r.SlaveID,
-	}
+// func (r *ModbusResult) Configuration(handler Handler, res Result) map[string]interface{} {
+// 	port := handler.(*ModbusHandler).Port
+// 	cc := map[string]interface{}{
+// 		"uri":   fmt.Sprintf("%s:%d", res.Host, port),
+// 		"model": "sunspec",
+// 		"id":    r.SlaveID,
+// 	}
 
-	return cc
-}
+// 	return cc
+// }
 
-func ModbusHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func ModbusHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := ModbusHandler{
 		Port:    502,
 		IDs:     []uint8{1},

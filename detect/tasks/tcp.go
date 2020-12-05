@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"errors"
@@ -10,10 +10,10 @@ import (
 )
 
 func init() {
-	registry.Add("tcp", TcpHandlerFactory)
+	Registry.Add("tcp", TcpHandlerFactory)
 }
 
-func TcpHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func TcpHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := TcpHandler{
 		Timeout: timeout,
 	}
@@ -41,7 +41,7 @@ func (h *TcpHandler) Test(log *util.Logger, ip string) []interface{} {
 	}
 
 	if err == nil {
-		return []interface{}{nil}
+		return success
 	}
 
 	return nil

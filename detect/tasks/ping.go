@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"time"
@@ -8,10 +8,10 @@ import (
 )
 
 func init() {
-	registry.Add("ping", PingHandlerFactory)
+	Registry.Add("ping", PingHandlerFactory)
 }
 
-func PingHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func PingHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := PingHandler{
 		Count:   1,
 		Timeout: timeout,
@@ -51,5 +51,5 @@ func (h *PingHandler) Test(log *util.Logger, ip string) (res []interface{}) {
 		return nil
 	}
 
-	return []interface{}{nil}
+	return success
 }

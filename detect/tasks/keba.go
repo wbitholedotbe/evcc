@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"sync"
@@ -13,10 +13,10 @@ type KebaResult struct {
 }
 
 func init() {
-	registry.Add("keba", KEBAHandlerFactory)
+	Registry.Add("keba", KEBAHandlerFactory)
 }
 
-func KEBAHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func KEBAHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := KEBAHandler{
 		Timeout: 5 * timeout,
 	}

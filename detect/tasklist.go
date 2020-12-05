@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/andig/evcc/detect/tasks"
 	"github.com/andig/evcc/util"
 	"github.com/thoas/go-funk"
 )
@@ -16,7 +17,7 @@ type Task struct {
 
 type TaskList struct {
 	tasks    []Task
-	handlers []TaskHandler
+	handlers []tasks.Handler
 	once     sync.Once
 }
 
@@ -74,7 +75,7 @@ func (l *TaskList) sort() {
 
 func (l *TaskList) createHandlers() {
 	for _, task := range l.tasks {
-		factory, err := registry.Get(task.Type)
+		factory, err := tasks.Registry.Get(task.Type)
 		if err != nil {
 			panic("invalid task type " + task.Type)
 		}

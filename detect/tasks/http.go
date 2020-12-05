@@ -1,4 +1,4 @@
-package detect
+package tasks
 
 import (
 	"fmt"
@@ -13,14 +13,14 @@ import (
 )
 
 func init() {
-	registry.Add("http", HttpHandlerFactory)
+	Registry.Add("http", HttpHandlerFactory)
 }
 
 type HttpResult struct {
 	Jq interface{}
 }
 
-func HttpHandlerFactory(conf map[string]interface{}) (TaskHandler, error) {
+func HttpHandlerFactory(conf map[string]interface{}) (Handler, error) {
 	handler := HttpHandler{
 		Schema: "http",
 		Port:   80,
