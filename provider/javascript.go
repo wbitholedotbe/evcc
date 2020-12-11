@@ -3,6 +3,7 @@ package provider
 import (
 	"github.com/andig/evcc/util"
 	"github.com/robertkrimen/otto"
+	_ "github.com/robertkrimen/otto/underscore" // underscore.js
 )
 
 // Javascript implements Javascript request provider
