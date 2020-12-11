@@ -59,4 +59,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 )
 
+// https://github.com/andig/viper/commit/a5af09afab5b454460e041d6451aead5cbb2c2ca
 replace github.com/spf13/viper => github.com/andig/viper v1.6.3-0.20201123175942-a5af09afab5b
+
+// https://github.com/andig/otto/commit/3248e5ea5d8b45aab3f588eb4c72e4445741dae5
+replace github.com/robertkrimen/otto => github.com/andig/otto v0.0.0-20201211072354-3248e5ea5d8b

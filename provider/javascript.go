@@ -16,10 +16,13 @@ func init() {
 	registry.Add("js", NewJavascriptProviderFromConfig)
 }
 
+var vmRegistry map[string]*otto.Otto
+
 // NewJavascriptProviderFromConfig creates a HTTP provider
 func NewJavascriptProviderFromConfig(other map[string]interface{}) (IntProvider, error) {
 	cc := struct {
 		Script string
+		VM     string
 	}{}
 
 	if err := util.DecodeOther(other, &cc); err != nil {
@@ -28,9 +31,17 @@ func NewJavascriptProviderFromConfig(other map[string]interface{}) (IntProvider,
 
 	log := util.NewLogger("js")
 
+	vm, ok := vmRegistry[cc.VM]
+	if !ok {
+		vm = otto.New()
+		if cc.VM != "" {
+			vmRegistry[cc.VM] = vm
+		}
+	}
+
 	p := &Javascript{
 		log:    log,
-		vm:     otto.New(),
+		vm:     vm,
 		script: cc.Script,
 	}
 
