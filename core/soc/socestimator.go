@@ -91,7 +91,11 @@ func (s *Estimator) RemainingChargeEnergy(targetSoC int) float64 {
 
 // SoC implements Vehicle.ChargeState with addition of given charged energy
 func (s *Estimator) SoC(chargedEnergy float64) (float64, error) {
+	s.log.DEBUG.Println("-- estimator.SoC")
+
 	f, err := s.vehicle.ChargeState()
+	s.log.DEBUG.Println("-- estimator.SoC: ChargeState", f, err)
+
 	if err != nil {
 		s.log.WARN.Printf("updating soc failed: %v", err)
 
@@ -108,6 +112,7 @@ func (s *Estimator) SoC(chargedEnergy float64) (float64, error) {
 	if s.estimate {
 		socDelta := s.socCharge - s.prevSoC
 		energyDelta := math.Max(chargedEnergy, 0) - s.prevChargedEnergy
+		s.log.DEBUG.Println("-- estimator.SoC: estimate==true", "socDelta", socDelta)
 
 		if socDelta != 0 || energyDelta < 0 { // soc value change or unexpected energy reset
 			// calculate gradient, wh per soc %

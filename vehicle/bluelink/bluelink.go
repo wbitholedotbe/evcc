@@ -340,7 +340,10 @@ func (v *API) statusAPI() (interface{}, error) {
 func (v *API) ChargeState() (float64, error) {
 	res, err := v.apiG()
 
+	v.log.DEBUG.Println("-- hyunday.ChargeState")
+
 	if res, ok := res.(response); err == nil && ok {
+		v.log.DEBUG.Println("-- hyunday.ChargeState", res)
 		return float64(res.ResMsg.EvStatus.BatteryStatus), nil
 	}
 

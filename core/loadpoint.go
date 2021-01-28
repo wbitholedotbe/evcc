@@ -830,16 +830,22 @@ func (lp *LoadPoint) socPollAllowed() bool {
 		lp.socUpdated = lp.clock.Now()
 	}
 
+	lp.log.DEBUG.Println("-- socPollAllowed", res)
+
 	return res
 }
 
 // publish state of charge, remaining charge duration and range
 func (lp *LoadPoint) publishSoCAndRange() {
+	lp.log.DEBUG.Println("-- publishSoCAndRange")
+
 	if lp.socEstimator == nil {
 		return
 	}
 
 	if lp.socPollAllowed() {
+		lp.log.DEBUG.Println("-- publishSoCAndRange", "check estimator")
+
 		f, err := lp.socEstimator.SoC(lp.chargedEnergy)
 		if err == nil {
 			lp.socCharge = math.Trunc(f)
@@ -848,6 +854,8 @@ func (lp *LoadPoint) publishSoCAndRange() {
 
 			chargeEstimate := time.Duration(-1)
 			if lp.charging() {
+				lp.log.DEBUG.Println("-- publishSoCAndRange", "is charging")
+
 				chargeEstimate = lp.socEstimator.RemainingChargeDuration(lp.chargePower, lp.SoC.Target)
 			}
 			lp.publish("chargeEstimate", chargeEstimate)
@@ -874,6 +882,8 @@ func (lp *LoadPoint) publishSoCAndRange() {
 
 	// reset if poll: connected/charging and not connected
 	if lp.SoC.Poll.Mode != pollAlways && !lp.connected() {
+		lp.log.DEBUG.Println("-- publishSoCAndRange", "reset poll")
+
 		lp.publish("socCharge", -1)
 		lp.publish("chargeEstimate", time.Duration(-1))
 
